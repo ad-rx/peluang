@@ -14,7 +14,6 @@
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
     <style>
-        /* Scrollbar & base polish */
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -81,7 +80,6 @@
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
-        /* Tailwind overrides for card consistency */
         .bg-slate-950 {
             background-color: #020617;
         }
@@ -112,11 +110,17 @@
         .text-slate-500 {
             color: #64748b;
         }
-        .text-slate-600 {
-            color: #475569;
-        }
         .text-slate-950 {
             color: #020617;
+        }
+        .error-fallback {
+            background: #1e293b;
+            color: #f87171;
+            padding: 2rem;
+            border-radius: 1rem;
+            margin: 2rem;
+            border: 1px solid #ef4444;
+            font-family: monospace;
         }
     </style>
 </head>
@@ -124,13 +128,26 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const {
-            useState,
-            useEffect,
-            useRef,
-            useCallback,
-            useMemo
-        } = React;
+        const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+        // ─── Safe storage (localStorage with fallback) ──────────────────
+        const memoryStore = new Map();
+
+        const safeGetItem = (key) => {
+            try {
+                return localStorage.getItem(key);
+            } catch (_) {
+                return memoryStore.get(key) || null;
+            }
+        };
+
+        const safeSetItem = (key, value) => {
+            try {
+                localStorage.setItem(key, value);
+            } catch (_) {
+                memoryStore.set(key, value);
+            }
+        };
 
         // ─── Web Audio helper ──────────────────────────────────────────────
         const playAudioEffect = (type) => {
@@ -208,18 +225,31 @@
             'Master Peluang'
         ];
 
-        // ─── ICON WRAPPER (Font Awesome) ──────────────────────────────────
-        const Icon = ({ name, className = '', ...rest }) => {
-            return <i className={`fas fa-${name} ${className}`} {...rest} />;
-        };
-
-        const IconSolid = ({ name, className = '', ...rest }) => {
-            return <i className={`fas fa-${name} ${className}`} {...rest} />;
-        };
-
-        const IconRegular = ({ name, className = '', ...rest }) => {
-            return <i className={`far fa-${name} ${className}`} {...rest} />;
-        };
+        // ─── Error Boundary ──────────────────────────────────────────────
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+            componentDidCatch(error, info) {
+                console.error('Error caught by Boundary:', error, info);
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="error-fallback">
+                            <h2>Something went wrong</h2>
+                            <pre>{this.state.error && this.state.error.toString()}</pre>
+                            <p>Please check the console for details.</p>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
 
         // ─── App ──────────────────────────────────────────────────────────
         function App() {
@@ -299,11 +329,12 @@
 
             const [finalReflection, setFinalReflection] = React.useState({ p1: '', p2: '', p3: '' });
 
+            // Safe storage initialization
             React.useEffect(() => {
-                let uuid = localStorage.getItem('jsit_student_uuid');
+                let uuid = safeGetItem('jsit_student_uuid');
                 if (!uuid) {
                     uuid = 'stu_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
-                    localStorage.setItem('jsit_student_uuid', uuid);
+                    safeSetItem('jsit_student_uuid', uuid);
                 }
             }, []);
 
@@ -352,7 +383,7 @@
             const handleStartAdventure = (e) => {
                 e.preventDefault();
                 if (!inputName.trim()) return;
-                const uuid = localStorage.getItem('jsit_student_uuid') || 'stu_' + Date.now();
+                const uuid = safeGetItem('jsit_student_uuid') || 'stu_' + Date.now();
                 const profile = { uuid, name: inputName.trim(), className: inputClass, startTime: new Date()
                         .toLocaleTimeString() };
                 setStudentProfile(profile);
@@ -982,7 +1013,7 @@
                                         <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
                                             Menarik! Kita tahu bahwa sebelum koin dilempar, hasil akhirnya tidak dapat
                                             dipastikan 100%. Namun, kita bisa mendata <span className="text-cyan-300 font-semibold">seluruh
-                                                hasil yang mungkin terjadi</span> yaitu {Angka, Gambar}.
+                                                hasil yang mungkin terjadi</span> yaitu {'Angka, Gambar'}.
                                         </p>
                                     </div>
                                 </div>
@@ -2065,7 +2096,11 @@
 
         // ─── Mount ──────────────────────────────────────────────────────
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(App));
+        root.render(
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>
+        );
     </script>
 </body>
 </html>
